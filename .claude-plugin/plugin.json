@@ -1,7 +1,7 @@
 {
   "name": "widget-platform-hooks",
-  "version": "0.1.1",
-  "description": "Deterministic reliability hooks for the widget-platform comparator loop. First capability: intercepts inspect_screen's device-tree result and uploads it directly to widget-platform's backend, handing the calling model back a small reference id instead of the full tree - avoids the tool-call-argument retyping failures that otherwise happen when a large device tree has to be reproduced as text.",
+  "version": "0.1.2",
+  "description": "Deterministic reliability hooks for the widget-platform comparator loop. Three hooks: (1) intercepts inspect_screen's device-tree result and uploads it directly to widget-platform's backend, handing the calling model back a small reference id instead of the full tree - avoids the tool-call-argument retyping failures that otherwise happen when a large device tree has to be reproduced as text; (2) generates a real, scannable QR code for a widget's deeplink the moment launch_widget_on_device creates it, saved locally with an instruction to include it in the final report; (3) reinforces advance_comparator_loop's own round_report field with a loud, separate instruction so the mandatory per-round score reporting doesn't silently stay buried in a JSON blob.",
   "author": {
     "name": "shivanshu.srivastava",
     "email": "shivanshu.srivastava@indmoney.com"
