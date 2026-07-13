@@ -1,5 +1,5 @@
 {
-  "description": "PostToolUse hook on inspect_screen: uploads the raw device UI tree directly to widget-platform's backend (the same /api/temp-contract storage store_temp_contract already uses) and substitutes a small capture_id in place of the full tree, so the calling model never has to retype a large device tree as a tool-call argument. Verified live (2026-07-13): updatedToolOutput fully replaces an MCP tool's result before the model sees it.",
+  "description": "Three PostToolUse hooks for widget-platform's comparator loop. (1) inspect_screen: uploads the raw device UI tree directly to widget-platform's backend and substitutes a small capture_id in place of the full tree, so the calling model never has to retype a large device tree as a tool-call argument. (2) launch_widget_on_device: generates a real, scannable QR code for the widget's deeplink and saves it to a local file, so the end-of-loop report has a concrete artifact to reference instead of depending on the model remembering to make one. (3) advance_comparator_loop: reinforces the tool's own round_report field with a loud, separate instruction, so the mandatory per-round score/breakdown reporting doesn't silently stay buried in a JSON blob the model reads via jq but never surfaces in chat. Verified live (2026-07-13): updatedToolOutput fully replaces an MCP tool's result before the model sees it.",
   "hooks": {
     "PostToolUse": [
       {
@@ -8,6 +8,26 @@
           {
             "type": "command",
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/capture-inspect-screen.sh\"",
+            "timeout": 20
+          }
+        ]
+      },
+      {
+        "matcher": ".*launch_widget_on_device.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/generate-qr-code.sh\"",
+            "timeout": 20
+          }
+        ]
+      },
+      {
+        "matcher": ".*advance_comparator_loop.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/reinforce-round-report.sh\"",
             "timeout": 20
           }
         ]
