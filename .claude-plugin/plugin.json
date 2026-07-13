@@ -1,6 +1,6 @@
 {
   "name": "widget-platform-hooks",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Deterministic reliability hooks for the widget-platform comparator loop. First capability: intercepts inspect_screen's device-tree result and uploads it directly to widget-platform's backend, handing the calling model back a small reference id instead of the full tree - avoids the tool-call-argument retyping failures that otherwise happen when a large device tree has to be reproduced as text.",
   "author": {
     "name": "shivanshu.srivastava",
