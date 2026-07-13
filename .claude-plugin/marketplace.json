@@ -1,0 +1,14 @@
+{
+  "name": "widget-platform-plugin",
+  "description": "Reliability hooks and tooling for the widget-platform comparator loop.",
+  "owner": {
+    "name": "shivanshuindmoney"
+  },
+  "plugins": [
+    {
+      "name": "widget-platform-hooks",
+      "source": "./",
+      "description": "Deterministic reliability hooks for the widget-platform comparator loop."
+    }
+  ]
+}
