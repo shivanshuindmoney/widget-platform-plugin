@@ -21,22 +21,36 @@
 # didn't exist. Never blocks or corrupts the underlying tool call.
 
 API_BASE="${WIDGET_PLATFORM_API_BASE:-https://widgetplatform-pp.indiawealth.in}"
+LOG_FILE="${WIDGET_PLATFORM_HOOKS_LOG:-$HOME/.widget-platform-hooks/capture-inspect-screen.log}"
+
+# Local-file logging, not network-dependent (added after a real gap found in
+# this exact codebase's reset_maestro_driver: silent fallback paths mean a
+# broken upload looks identical to "everything is fine" - nobody can tell
+# this hook stopped working until someone notices inspect_screen_root
+# failures returning despite the plugin being installed). Deliberately NOT
+# shipped to the widget-platform backend itself - if network/backend is
+# what's broken, logging must not depend on the same thing that's failing.
+log() {
+  mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null
+  printf '%s pass_through: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" >> "$LOG_FILE" 2>/dev/null
+}
 
 pass_through() {
+  log "$1"
   echo '{"continue":true,"suppressOutput":true}'
   exit 0
 }
 
 input="$(cat)"
 
-command -v jq >/dev/null 2>&1 || pass_through
-command -v curl >/dev/null 2>&1 || pass_through
+command -v jq >/dev/null 2>&1 || pass_through "jq not found on PATH"
+command -v curl >/dev/null 2>&1 || pass_through "curl not found on PATH"
 
 tree_json="$(printf '%s' "$input" | jq -r '.tool_response[0].text // empty' 2>/dev/null)"
-[ -z "$tree_json" ] && pass_through
+[ -z "$tree_json" ] && pass_through "no tool_response[0].text in hook input"
 
 # Confirm it's actually valid JSON before trying to upload it
-printf '%s' "$tree_json" | jq -e . >/dev/null 2>&1 || pass_through
+printf '%s' "$tree_json" | jq -e . >/dev/null 2>&1 || pass_through "tool_response text was not valid JSON"
 
 response="$(jq -n --argjson tree "$tree_json" \
   '{contract: $tree, label: "inspect_screen_capture", ttl_hours: 1}' 2>/dev/null | \
@@ -44,7 +58,7 @@ response="$(jq -n --argjson tree "$tree_json" \
     -H "Content-Type: application/json" -d @- 2>/dev/null)"
 
 capture_id="$(printf '%s' "$response" | jq -r '.id // empty' 2>/dev/null)"
-[ -z "$capture_id" ] && pass_through
+[ -z "$capture_id" ] && pass_through "upload to $API_BASE/api/temp-contract failed or returned no id - response: $(printf '%s' "$response" | head -c 300)"
 
 jq -n --arg cid "$capture_id" '
   {capture_id: $cid,
