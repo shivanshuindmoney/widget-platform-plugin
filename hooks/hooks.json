@@ -1,0 +1,17 @@
+{
+  "description": "PostToolUse hook on inspect_screen: uploads the raw device UI tree directly to widget-platform's backend (the same /api/temp-contract storage store_temp_contract already uses) and substitutes a small capture_id in place of the full tree, so the calling model never has to retype a large device tree as a tool-call argument. Verified live (2026-07-13): updatedToolOutput fully replaces an MCP tool's result before the model sees it.",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": ".*inspect_screen.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/capture-inspect-screen.sh\"",
+            "timeout": 20
+          }
+        ]
+      }
+    ]
+  }
+}
