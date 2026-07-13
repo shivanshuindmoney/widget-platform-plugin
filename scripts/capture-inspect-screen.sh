@@ -60,9 +60,16 @@ response="$(jq -n --argjson tree "$tree_json" \
 capture_id="$(printf '%s' "$response" | jq -r '.id // empty' 2>/dev/null)"
 [ -z "$capture_id" ] && pass_through "upload to $API_BASE/api/temp-contract failed or returned no id - response: $(printf '%s' "$response" | head -c 300)"
 
+# The note spells out the exact call shape, not just the field name in
+# prose - a real incident had a calling model read an earlier, shorter
+# version of this note and still get it wrong, nesting capture_id INSIDE
+# inspect_screen_root instead of passing it as its own separate parameter.
+# That mistake is now also caught server-side (advance_comparator_loop
+# auto-corrects it), but fixing it here too means it's caught before ever
+# happening, not just recovered from after the fact.
 jq -n --arg cid "$capture_id" '
   {capture_id: $cid,
-   note: "Full inspect_screen tree stored server-side - pass this as inspect_screen_capture_id to advance_comparator_loop instead of inspect_screen_root"}
+   note: ("Full inspect_screen tree stored server-side. Call advance_comparator_loop with capture_id as its OWN SEPARATE argument named inspect_screen_capture_id - example: advance_comparator_loop(loop_id=..., inspect_screen_capture_id=\"" + $cid + "\"). Do NOT nest it inside inspect_screen_root (e.g. inspect_screen_root={\"capture_id\": \"" + $cid + "\"}) - the backend now auto-corrects that specific mistake if it happens, but passing it correctly the first time avoids relying on that fallback at all.")}
   | tostring
   | {hookSpecificOutput: {hookEventName: "PostToolUse", updatedToolOutput: .}}
 '
