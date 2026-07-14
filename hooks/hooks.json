@@ -1,6 +1,17 @@
 {
-  "description": "Three PostToolUse hooks for widget-platform's comparator loop. (1) inspect_screen: uploads the raw device UI tree directly to widget-platform's backend and substitutes a small capture_id in place of the full tree, so the calling model never has to retype a large device tree as a tool-call argument. (2) launch_widget_on_device: generates a real, scannable QR code for the widget's deeplink and saves it to a local file, so the end-of-loop report has a concrete artifact to reference instead of depending on the model remembering to make one. (3) advance_comparator_loop: reinforces the tool's own round_report field with a loud, separate instruction, so the mandatory per-round score/breakdown reporting doesn't silently stay buried in a JSON blob the model reads via jq but never surfaces in chat. Verified live (2026-07-13): updatedToolOutput fully replaces an MCP tool's result before the model sees it.",
+  "description": "Reliability hooks for widget-platform. Three PostToolUse hooks for the comparator loop: (1) inspect_screen: uploads the raw device UI tree directly to widget-platform's backend and substitutes a small capture_id in place of the full tree, so the calling model never has to retype a large device tree as a tool-call argument. (2) launch_widget_on_device: generates a real, scannable QR code for the widget's deeplink and saves it to a local file, so the end-of-loop report has a concrete artifact to reference instead of depending on the model remembering to make one. (3) advance_comparator_loop: reinforces the tool's own round_report field with a loud, separate instruction, so the mandatory per-round score/breakdown reporting doesn't silently stay buried in a JSON blob the model reads via jq but never surfaces in chat. Plus one UserPromptSubmit hook: (4) universal-communicator-formula: when a prompt asks for a widget formula or a universal_widget_communication block, injects an instruction steering the model to the universal-communicator-formula skill instead of hand-writing the JS and reintroducing the cross-engine (Rhino/JSC) runtime bugs that skill exists to prevent. Verified live (2026-07-13): updatedToolOutput fully replaces an MCP tool's result before the model sees it.",
   "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/reinforce-formula-builder.sh\"",
+            "timeout": 20
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": ".*inspect_screen.*",
