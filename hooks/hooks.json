@@ -1,5 +1,5 @@
 {
-  "description": "PreToolUse + PostToolUse hooks for widget-platform's comparator loop and publish flow. PostToolUse: (1) inspect_screen: uploads the raw device UI tree directly to widget-platform's backend and substitutes a small capture_id in place of the full tree, so the calling model never has to retype a large device tree as a tool-call argument. (2) launch_widget_on_device: generates a real, scannable QR code for the widget's deeplink and saves it to a local file, so the end-of-loop report has a concrete artifact to reference instead of depending on the model remembering to make one. (3) advance_comparator_loop: reinforces the tool's own round_report field with a loud, separate instruction, so the mandatory per-round score/breakdown reporting doesn't silently stay buried in a JSON blob the model reads via jq but never surfaces in chat. (4) publish_widget: when a call actually updated an already-published widget in place, reinforces that fact with a loud reminder to confirm it was intended. PreToolUse: (5) publish_widget: hard-blocks style_request_type=\"updation\" passed without generation_id - a static, zero-ambiguity shape that silently downgrades to \"addition\" server-side and creates a duplicate history entry instead of updating anything (the root cause of a real reported incident). Verified live (2026-07-13): updatedToolOutput fully replaces an MCP tool's result before the model sees it.",
+  "description": "PreToolUse + UserPromptSubmit + PostToolUse hooks for widget-platform's comparator loop, publish flow, and formula authoring. PreToolUse: (1) publish_widget: hard-blocks style_request_type=\"updation\" passed without generation_id - a static, zero-ambiguity shape that silently downgrades to \"addition\" server-side and creates a duplicate history entry instead of updating anything (the root cause of a real reported incident). UserPromptSubmit: (2) universal-communicator-formula: when a prompt asks for a widget formula or a universal_widget_communication block, injects an instruction steering the model to the universal-communicator-formula skill instead of hand-writing the JS and reintroducing the cross-engine (Rhino/JSC) runtime bugs that skill exists to prevent. PostToolUse: (3) inspect_screen: uploads the raw device UI tree directly to widget-platform's backend and substitutes a small capture_id in place of the full tree, so the calling model never has to retype a large device tree as a tool-call argument. (4) launch_widget_on_device: generates a real, scannable QR code for the widget's deeplink and saves it to a local file, so the end-of-loop report has a concrete artifact to reference instead of depending on the model remembering to make one. (5) advance_comparator_loop: reinforces the tool's own round_report field with a loud, separate instruction, so the mandatory per-round score/breakdown reporting doesn't silently stay buried in a JSON blob the model reads via jq but never surfaces in chat. (6) publish_widget: when a call actually updated an already-published widget in place, reinforces that fact with a loud reminder to confirm it was intended. Verified live (2026-07-13): updatedToolOutput fully replaces an MCP tool's result before the model sees it.",
   "hooks": {
     "PreToolUse": [
       {
@@ -8,6 +8,17 @@
           {
             "type": "command",
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/guard-publish-widget-update-mode.sh\"",
+            "timeout": 20
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/reinforce-formula-builder.sh\"",
             "timeout": 20
           }
         ]

@@ -262,6 +262,51 @@ empty_pw_output="$(echo '{}' | bash "$SCRIPT_DIR/reinforce-publish-widget-update
 assert_eq "empty input falls through to continue:true" \
   "true" "$(echo "$empty_pw_output" | jq -r '.continue')"
 
+# ── reinforce-formula-builder.sh ─────────────────────────────────────────
+
+echo ""
+echo "reinforce-formula-builder.sh:"
+
+# A prompt explicitly asking for a formula -> must inject the skill instruction.
+formula_input="$(jq -n '{prompt: "Create a required-amount validation formula for the lumpsum widget"}')"
+formula_output="$(echo "$formula_input" | bash "$SCRIPT_DIR/reinforce-formula-builder.sh")"
+formula_ctx="$(echo "$formula_output" | jq -r '.hookSpecificOutput.additionalContext // empty')"
+assert_not_empty "formula prompt injects additionalContext" "$formula_ctx"
+if echo "$formula_ctx" | grep -q "universal-communicator-formula skill"; then
+  echo "  PASS  injected context points at the universal-communicator-formula skill"
+  PASSED=$((PASSED + 1))
+else
+  echo "  FAIL  injected context does not mention the universal-communicator-formula skill"
+  FAILURES=$((FAILURES + 1))
+fi
+assert_eq "formula prompt sets UserPromptSubmit event name" \
+  "UserPromptSubmit" "$(echo "$formula_output" | jq -r '.hookSpecificOutput.hookEventName')"
+
+# A prompt mentioning the universal_widget_communication block -> must match.
+uwc_input="$(jq -n '{prompt: "Give me the full universal_widget_communication block for this checkbox"}')"
+uwc_output="$(echo "$uwc_input" | bash "$SCRIPT_DIR/reinforce-formula-builder.sh")"
+assert_not_empty "universal_widget_communication prompt injects additionalContext" \
+  "$(echo "$uwc_output" | jq -r '.hookSpecificOutput.additionalContext // empty')"
+
+# Case-insensitivity — uppercase should still match.
+upper_input="$(jq -n '{prompt: "Build the FORMULA for input_validators"}')"
+upper_output="$(echo "$upper_input" | bash "$SCRIPT_DIR/reinforce-formula-builder.sh")"
+assert_not_empty "uppercase / input_validators prompt still matches" \
+  "$(echo "$upper_output" | jq -r '.hookSpecificOutput.additionalContext // empty')"
+
+# An unrelated prompt -> must NOT inject anything (fail-open, no skill nudge).
+unrelated_input="$(jq -n '{prompt: "Refactor the login screen layout constraints"}')"
+unrelated_output="$(echo "$unrelated_input" | bash "$SCRIPT_DIR/reinforce-formula-builder.sh")"
+assert_eq "unrelated prompt falls through to continue:true" \
+  "true" "$(echo "$unrelated_output" | jq -r '.continue')"
+assert_eq "unrelated prompt injects no additionalContext" \
+  "" "$(echo "$unrelated_output" | jq -r '.hookSpecificOutput.additionalContext // empty')"
+
+# Missing prompt field -> must fail open, not crash.
+no_prompt_output="$(echo '{}' | bash "$SCRIPT_DIR/reinforce-formula-builder.sh")"
+assert_eq "missing prompt field falls through to continue:true" \
+  "true" "$(echo "$no_prompt_output" | jq -r '.continue')"
+
 # ── summary ──────────────────────────────────────────────────────────────
 
 echo ""
