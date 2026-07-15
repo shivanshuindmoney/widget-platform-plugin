@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# test_hooks.sh — regression tests for generate-qr-code.sh and
-# reinforce-round-report.sh (capture-inspect-screen.sh's own live-device
-# verification is documented in this repo's commit history instead; these
-# two don't need a real device, so a real automated test is practical here).
+# test_hooks.sh — regression tests for generate-qr-code.sh,
+# reinforce-round-report.sh, guard-publish-widget-update-mode.sh, and
+# reinforce-publish-widget-update.sh (capture-inspect-screen.sh's own
+# live-device verification is documented in this repo's commit history
+# instead; these don't need a real device, so a real automated test is
+# practical here).
 #
 # Run: bash scripts/test_hooks.sh
 #
@@ -162,6 +164,103 @@ assert_eq "malformed tool_response text falls through to continue:true" \
 empty_rr_output="$(echo '{}' | bash "$SCRIPT_DIR/reinforce-round-report.sh")"
 assert_eq "empty input falls through to continue:true" \
   "true" "$(echo "$empty_rr_output" | jq -r '.continue')"
+
+# ── guard-publish-widget-update-mode.sh ──────────────────────────────────
+# PreToolUse hook: unlike the PostToolUse scripts above, "allow" produces NO
+# stdout at all (matching this ecosystem's own Python precedent,
+# backend/claude_hooks/guard_comparator_loop_payload.py) - only a block
+# decision prints anything.
+
+echo ""
+echo "guard-publish-widget-update-mode.sh:"
+
+guard_input() {
+  jq -n --arg tool "$1" --arg style "$2" --arg gid "$3" \
+    '{tool_name: $tool, tool_input: ({style_request_type: $style} + (if $gid == "" then {} else {generation_id: $gid} end))}'
+}
+
+# updation + no generation_id -> BLOCKED
+blocked_output="$(guard_input "mcp__widget-history__publish_widget" "updation" "" | bash "$SCRIPT_DIR/guard-publish-widget-update-mode.sh")"
+assert_eq "updation without generation_id is blocked" \
+  "block" "$(echo "$blocked_output" | jq -r '.decision')"
+if echo "$blocked_output" | jq -r '.reason' | grep -q "generation_id"; then
+  echo "  PASS  block reason mentions generation_id"
+  PASSED=$((PASSED + 1))
+else
+  echo "  FAIL  block reason does not mention generation_id"
+  FAILURES=$((FAILURES + 1))
+fi
+
+# updation + generation_id present -> ALLOWED (no output)
+allowed_output="$(guard_input "mcp__widget-history__publish_widget" "updation" "abc-123" | bash "$SCRIPT_DIR/guard-publish-widget-update-mode.sh")"
+assert_eq "updation with generation_id is allowed (no output)" "" "$allowed_output"
+
+# addition (default), no generation_id -> ALLOWED (no output) - never blocks this shape
+addition_output="$(guard_input "mcp__widget-history__publish_widget" "addition" "" | bash "$SCRIPT_DIR/guard-publish-widget-update-mode.sh")"
+assert_eq "addition without generation_id is allowed (no output)" "" "$addition_output"
+
+# addition + generation_id present (a deliberate re-suffix while updating) -> ALLOWED
+addition_with_gid_output="$(guard_input "mcp__widget-history__publish_widget" "addition" "abc-123" | bash "$SCRIPT_DIR/guard-publish-widget-update-mode.sh")"
+assert_eq "addition with generation_id is allowed (no output)" "" "$addition_with_gid_output"
+
+# unrelated tool name -> ALLOWED (no output), must not fire at all
+unrelated_output="$(guard_input "mcp__widget-history__get_page_widgets" "updation" "" | bash "$SCRIPT_DIR/guard-publish-widget-update-mode.sh")"
+assert_eq "unrelated tool name is allowed (no output)" "" "$unrelated_output"
+
+# completely empty input -> must fail open, not crash
+empty_guard_output="$(echo '{}' | bash "$SCRIPT_DIR/guard-publish-widget-update-mode.sh")"
+assert_eq "empty input is allowed (no output, no crash)" "" "$empty_guard_output"
+
+# ── reinforce-publish-widget-update.sh ───────────────────────────────────
+
+echo ""
+echo "reinforce-publish-widget-update.sh:"
+
+update_result="$(jq -n '{
+  generation_id: "gen-existing-123", updated_existing: true,
+  style_request_type_used: "updation", deeplink: "https://www.indmoney.com/widget/page?x=1"
+}')"
+update_input="$(jq -n --arg text "$update_result" '{tool_response: [{text: $text}]}')"
+update_output="$(echo "$update_input" | bash "$SCRIPT_DIR/reinforce-publish-widget-update.sh")"
+update_updated="$(echo "$update_output" | jq -r '.hookSpecificOutput.updatedToolOutput')"
+
+assert_eq "original 'generation_id' field preserved" \
+  "gen-existing-123" "$(echo "$update_updated" | jq -r '.generation_id')"
+assert_eq "original 'deeplink' field preserved" \
+  "https://www.indmoney.com/widget/page?x=1" "$(echo "$update_updated" | jq -r '.deeplink')"
+reinforce_msg="$(echo "$update_updated" | jq -r '.MANDATORY_VISIBLE_CHAT_MESSAGE_THIS_TURN')"
+assert_not_empty "MANDATORY_VISIBLE_CHAT_MESSAGE_THIS_TURN is present" "$reinforce_msg"
+if echo "$reinforce_msg" | grep -q "gen-existing-123" && echo "$reinforce_msg" | grep -q "updation"; then
+  echo "  PASS  reinforcement message includes generation_id and style_request_type_used"
+  PASSED=$((PASSED + 1))
+else
+  echo "  FAIL  reinforcement message missing generation_id or style_request_type_used"
+  FAILURES=$((FAILURES + 1))
+fi
+
+# updated_existing=false (a brand-new publish) -> must fail open, nothing to reinforce
+new_result="$(jq -n '{generation_id: "gen-new-456", updated_existing: false, style_request_type_used: "addition"}')"
+new_input="$(jq -n --arg text "$new_result" '{tool_response: [{text: $text}]}')"
+new_output="$(echo "$new_input" | bash "$SCRIPT_DIR/reinforce-publish-widget-update.sh")"
+assert_eq "updated_existing=false falls through to continue:true" \
+  "true" "$(echo "$new_output" | jq -r '.continue')"
+
+# missing updated_existing entirely -> must fail open
+no_flag_result="$(jq -n '{generation_id: "gen-789"}')"
+no_flag_input="$(jq -n --arg text "$no_flag_result" '{tool_response: [{text: $text}]}')"
+no_flag_output="$(echo "$no_flag_input" | bash "$SCRIPT_DIR/reinforce-publish-widget-update.sh")"
+assert_eq "missing updated_existing falls through to continue:true" \
+  "true" "$(echo "$no_flag_output" | jq -r '.continue')"
+
+# malformed tool_response text -> must fail open, not crash
+malformed_pw_output="$(echo '{"tool_response":[{"text":"not json"}]}' | bash "$SCRIPT_DIR/reinforce-publish-widget-update.sh")"
+assert_eq "malformed tool_response text falls through to continue:true" \
+  "true" "$(echo "$malformed_pw_output" | jq -r '.continue')"
+
+# completely empty input -> must fail open
+empty_pw_output="$(echo '{}' | bash "$SCRIPT_DIR/reinforce-publish-widget-update.sh")"
+assert_eq "empty input falls through to continue:true" \
+  "true" "$(echo "$empty_pw_output" | jq -r '.continue')"
 
 # ── summary ──────────────────────────────────────────────────────────────
 
